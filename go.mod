@@ -1,4 +1,4 @@
-module eugeniocarvalho.dev/eugeniucarvalho/utils
+module git.eugeniocarvalho.dev/eugeniucarvalho/utils
 
 go 1.13
 
