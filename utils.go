@@ -1,30 +1,20 @@
 package utils
 
 import (
-	"fmt"
-	"sync"
-	//"fmt"
-	//"html"
-	//"net/mail"
 	"bytes"
+	"encoding/base64"
+	"fmt"
+	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
+	"path"
 	"regexp"
-	"time"
-	//"reflect"
-	"encoding/base64"
-	"io/ioutil"
 	"strings"
+	"sync" //"fmt"
+	"time" //"reflect"
 
 	"golang.org/x/net/html/charset"
-	//"errors"
-	//"strings"
-	//"encoding/json"
-	//"gopkg.in/mgo.v2"
-	//"gopkg.in/mgo.v2/bson"
-	//"git.gojus.com.br/eugeniucarvalho/gojus/shared"
-	//"git.gojus.com.br/eugeniucarvalho/gojus/config"
-	//"git.gojus.com.br/eugeniucarvalho/gojus/services"
 )
 
 type MutexCounter struct {
@@ -61,6 +51,15 @@ func ToUTF8(str, origEncoding string) string {
 	return string(strBytes)
 }
 
+func GetFiles(directory string) ([]os.FileInfo, error) {
+
+	files, err := ioutil.ReadDir(directory)
+	if err != nil {
+		return []os.FileInfo{}, err
+	}
+	return files, nil
+}
+
 func FileGetContents(filename string) (string, error) {
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -69,26 +68,132 @@ func FileGetContents(filename string) (string, error) {
 	return string(b), nil
 }
 
+// FileExists reports whether the named file or directory exists.
+func FileExists(name string) bool {
+	if _, err := os.Stat(name); err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
+	}
+	return true
+}
+
+func CopyDir(source, dest string) error {
+	var (
+		err        error
+		file       *os.File
+		sourceinfo os.FileInfo
+		objects    []os.FileInfo
+	)
+	if sourceinfo, err = os.Stat(source); err != nil {
+		return err
+	}
+
+	if err = os.MkdirAll(dest, sourceinfo.Mode()); err != nil {
+		return err
+	}
+	file, _ = os.Open(source)
+	if objects, err = file.Readdir(-1); err != nil {
+		return err
+	}
+
+	for _, obj := range objects {
+		srcPointer := source + "/" + obj.Name()
+		dstPointer := dest + "/" + obj.Name()
+
+		if obj.IsDir() {
+
+			if err = CopyDir(srcPointer, dstPointer); err != nil {
+				return err
+			}
+		} else if err = CopyFile(srcPointer, dstPointer); err != nil {
+			return err
+		}
+
+	}
+	return nil
+}
+
+func CopyFile(source, dest string) error {
+
+	var (
+		err        error
+		sourcefile *os.File
+		destfile   *os.File
+	)
+
+	if sourcefile, err = os.Open(source); err != nil {
+		return err
+	}
+
+	defer sourcefile.Close()
+
+	if destfile, err = os.Create(dest); err != nil {
+		return err
+	}
+
+	defer destfile.Close()
+
+	if _, err = io.Copy(destfile, sourcefile); err == nil {
+		sourceinfo, err := os.Stat(source)
+		if err != nil {
+			err = os.Chmod(dest, sourceinfo.Mode())
+		}
+	}
+
+	return nil
+}
+
 func FilePutContents(filename string, content string, perm os.FileMode) error {
 	return FilePutContentsBytes(filename, []byte(content), perm)
 }
 
+func Mkdir(perm os.FileMode, paths ...string) (err error) {
+
+	for _, path := range paths {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+
+			if err = os.MkdirAll(path, perm); err != nil {
+				return err
+			}
+		}
+	}
+	return
+}
 func FilePutContentsBytes(filename string, content []byte, perm os.FileMode) error {
+
 	var (
-		err error
-		f   *os.File
+		// err error
+		// f   *os.File
+		dir = path.Dir(filename)
 	)
 
-	if err = ioutil.WriteFile(filename, []byte(""), perm); err != nil {
-		return err
+	// fmt.Println(filename, dir)
+
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+
+		if err = os.MkdirAll(dir, perm); err != nil {
+			return err
+		}
 	}
 
-	if f, err = os.Create(filename); err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = f.Write(content)
-	return err
+	// if _, err := os.Stat(filename); os.IsNotExist(err) {
+	// 	// if f, err = os.Create(filename); err != nil {
+	// 	// 	return err
+	// 	// }
+	//         err = ioutil.WriteFile(fi.Name(), []byte(Value), 0644)
+	//     } else {
+	//         fmt.Println(" the word is not in the file")
+	//     }
+
+	// } else if f, err = os.OpenFile(filename, os.O_WRONLY, os.ModeAppend); err != nil {
+	// 	return err
+	// }
+
+	// defer f.Close()
+	// _, err = f.Write(content)
+	// return err
+	return ioutil.WriteFile(filename, []byte(content), 0644)
 }
 
 func RemoveFile(file string) error {
